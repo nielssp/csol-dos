@@ -25,8 +25,8 @@ char *combine_paths(const char *path1, const char *path2) {
   size_t combined_length = length1 + length2 + 2;
   char *combined_path = malloc(combined_length);
   memcpy(combined_path, path1, length1);
-  if (path1[length1 - 1] != '/') {
-    combined_path[length1++] = '/';
+  if (path1[length1 - 1] != '\\') {
+    combined_path[length1++] = '\\';
   }
   memcpy(combined_path + length1, path2, length2);
   combined_path[length1 + length2] = '\0';

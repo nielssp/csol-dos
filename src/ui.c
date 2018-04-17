@@ -5,7 +5,7 @@
  */
 
 #include <stdlib.h>
-#include <ncurses.h>
+#include <curses.h>
 #include <locale.h>
 #include <time.h>
 
@@ -57,14 +57,18 @@ void print_card_name_l(int y, int x, Card *card, Theme *theme) {
     default:
       mvprintw(y, x, "%d", card->rank);
   }
+  raw_output(1);
   printw(card_suit(card, theme));
+  raw_output(0);
 }
 
 void print_card_name_r(int y, int x, Card *card, Theme *theme) {
   if (y < 0 || y >= win_h) {
     return;
   }
+  raw_output(1);
   mvprintw(y, x - 1 - (card->rank == 10), card_suit(card, theme));
+  raw_output(0);
   switch (card->rank) {
     case ACE:
       printw("A");
@@ -91,7 +95,8 @@ void print_layout(int y, int x, Card *card, Layout layout, int full, Theme *them
     mvprintw(y, x, layout.top);
   }
   if (full && theme->height > 1) {
-    for (int i = 1; i < theme->height - 1; i++) {
+    int i;
+    for (i = 1; i < theme->height - 1; i++) {
       if (y + i >= 0 && y + i < win_h) {
         mvprintw(y + i, x, layout.middle);
       }
@@ -202,6 +207,8 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
   off_y = 0;
   wbkgd(stdscr, COLOR_PAIR(COLOR_PAIR_BACKGROUND));
   while (1) {
+    Pile *pile;
+    int ch;
     cursor_card = NULL;
     cursor_pile = NULL;
     max_x = max_y = 0;
@@ -217,14 +224,13 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         off_y = 0;
       }
     }
-    for (Pile *pile = piles; pile; pile = pile->next) {
+    for (pile = piles; pile; pile = pile->next) {
       print_pile(pile, theme);
     }
     move(theme->y_margin + off_y + cur_y, theme->x_margin + cur_x * (theme->width + theme->x_spacing));
     refresh();
 
     attron(COLOR_PAIR(COLOR_PAIR_BACKGROUND));
-    int ch;
     if (mouse_action) {
       ch = mouse_action;
       mouse_action = 0;
@@ -253,7 +259,7 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         if (cur_x > max_x) cur_x = max_x;
         break;
       case 'K':
-      case 337: // shift-up
+      case 337: /* shift-up */
         if (cursor_card) {
           if (cursor_card->prev && NOT_BOTTOM(cursor_card->prev)) {
             Card *card = cursor_card->prev;
@@ -273,7 +279,7 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         if (cur_y < 0) cur_y = 0;
         break;
       case 'J':
-      case 336: // shift-down
+      case 336: /* shift-down */
         if (cursor_card && cursor_card->next) {
           Card *card = cursor_card->next;
           while (card->next && card->next->up == card->up) {
@@ -316,7 +322,8 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         }
         break;
       case 'm':
-      case 10: // enter
+      case 10: /* enter */
+      case 13: /* enter */
         if (selection && cursor_pile) {
           if (legal_move_stack(cursor_pile, selection, selection_pile)) {
             clear();
@@ -331,12 +338,12 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         }
         break;
       case 'u':
-      case 26: // ^z
+      case 26: /* ^z */
         undo_move();
         clear();
         break;
       case 'U':
-      case 25: // ^y
+      case 25: /* ^y */
         redo_move();
         clear();
         break;
@@ -353,7 +360,7 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
       case 'q':
         return 0;
       case KEY_MOUSE:
-        if (getmouse(&mouse) == OK) {
+        if (nc_getmouse(&mouse) == OK) {
           cur_y = mouse.y - theme->y_margin - off_y;
           cur_x = (mouse.x - theme->x_margin) / (theme->width + theme->x_spacing);
           if (mouse.bstate & BUTTON3_PRESSED) {
@@ -371,13 +378,15 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
 }
 
 void ui_main(Game *game, Theme *theme, int enable_color, unsigned int seed) {
+  mmask_t oldmask;
   setlocale(LC_ALL, "");
   initscr();
   if (enable_color) {
+    Color *color;
     start_color();
-    for (Color *color = theme->colors; color; color = color->next) {
+    for (color = theme->colors; color; color = color->next) {
       if (init_color(color->index, color->red, color->green, color->blue) != 0) {
-        // TODO: inform user
+        /* TODO: inform user */
       }
     }
     init_pair(COLOR_PAIR_BACKGROUND, theme->background.fg, theme->background.bg);
@@ -392,19 +401,21 @@ void ui_main(Game *game, Theme *theme, int enable_color, unsigned int seed) {
   keypad(stdscr, 1);
   noecho();
 
-  mmask_t oldmask;
   mousemask(BUTTON1_PRESSED | BUTTON3_PRESSED, &oldmask);
 
   while (1) {
+    Card *deck;
+    Pile *piles;
+    int redeal;
     srand(seed);
 
-    Card *deck = new_deck();
+    deck = new_deck();
     move_stack(deck, shuffle_stack(take_stack(deck->next)));
 
-    Pile *piles = deal_cards(game, deck);
+    piles = deal_cards(game, deck);
     deals++;
 
-    int redeal = ui_loop(game, theme, piles);
+    redeal = ui_loop(game, theme, piles);
     delete_piles(piles);
     delete_stack(deck);
 
