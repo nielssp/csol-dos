@@ -37,7 +37,6 @@ char *find_csolrc() {
 
 int main(int argc, char *argv[]) {
   int opt, rc_opt, error;
-  int option_index = 0;
   int colors = 1;
   unsigned int seed = time(NULL);
   enum action action = PLAY;
