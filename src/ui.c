@@ -8,6 +8,7 @@
 #include <curses.h>
 #include <locale.h>
 #include <time.h>
+#include <ctype.h>
 
 #include "ui.h"
 #include "card.h"
@@ -107,18 +108,7 @@ void print_layout(int y, int x, Card *card, Layout layout, int full, Theme *them
   }
 }
 
-int print_card(int y, int x, Card *card, int full, Theme *theme) {
-  int y2 = y + full * (theme->height - 1);
-  if (y2 > max_y) max_y = y2;
-  if (x > max_x) max_x = x;
-  if (y <= cur_y && y2 >= cur_y && x == cur_x) cursor_card = card;
-  card->x = x;
-  card->y = y;
-  y = theme->y_margin + off_y + y;
-  x = theme->x_margin + x * (theme->width + theme->x_spacing);
-  if (win_h - 1 < y) {
-    return 0;
-  }
+void print_card(int y, int x, Card *card, int full, Theme *theme) {
   if (card == selection) {
     attron(A_REVERSE);
   }
@@ -126,34 +116,62 @@ int print_card(int y, int x, Card *card, int full, Theme *theme) {
     attron(COLOR_PAIR(COLOR_PAIR_EMPTY));
     print_layout(y, x, card, theme->empty_layout, full, theme);
     if (card->rank > 0) {
-      print_card_name_l(y, x + 1, card, theme);
+      print_card_name_l(y, x + theme->empty_layout.left_padding, card, theme);
     }
   } else if (!card->up) {
     attron(COLOR_PAIR(COLOR_PAIR_BACK));
     print_layout(y, x, card, theme->back_layout, full, theme);
   } else {
+    int left_padding, right_padding;
     if (card->suit & RED) {
       attron(COLOR_PAIR(COLOR_PAIR_RED));
       print_layout(y, x, card, theme->red_layout, full, theme);
+      left_padding = theme->red_layout.left_padding;
+      right_padding = theme->red_layout.right_padding;
     } else {
       attron(COLOR_PAIR(COLOR_PAIR_BLACK));
       print_layout(y, x, card, theme->black_layout, full, theme);
+      left_padding = theme->black_layout.left_padding;
+      right_padding = theme->black_layout.right_padding;
     }
     if (full && theme->height > 1) {
-      print_card_name_r(y + theme->height - 1, x + theme->width - 2, card, theme);
+      print_card_name_r(y + theme->height - 1, x + theme->width - (right_padding + 1), card, theme);
     }
-    print_card_name_l(y, x + 1, card, theme);
+    print_card_name_l(y, x + left_padding, card, theme);
   }
   attroff(A_REVERSE);
+}
+
+int theme_y(int y, Theme *theme) {
+  return theme->y_margin + off_y + y;
+}
+
+int theme_x(int x, Theme *theme) {
+  return theme->x_margin + x * (theme->width + theme->x_spacing);
+}
+
+int print_card_in_grid(int y, int x, Card *card, int full, Theme *theme) {
+  int y2 = y + full * (theme->height - 1);
+  if (y2 > max_y) max_y = y2;
+  if (x > max_x) max_x = x;
+  if (y <= cur_y && y2 >= cur_y && x == cur_x) cursor_card = card;
+  card->x = x;
+  card->y = y;
+  y = theme_y(y, theme);
+  x = theme_x(x, theme);
+  if (win_h - 1 < y) {
+    return 0;
+  }
+  print_card(y, x, card, full, theme);
   return cursor_card == card;
 }
 
 int print_card_top(int y, int x, Card *card, Theme *theme) {
-  return print_card(y, x, card, 0, theme);
+  return print_card_in_grid(y, x, card, 0, theme);
 }
 
 int print_card_full(int y, int x, Card *card, Theme *theme) {
-  return print_card(y, x, card, 1, theme);
+  return print_card_in_grid(y, x, card, 1, theme);
 }
 
 int print_stack(int y, int x, Card *bottom, Theme *theme) {
@@ -178,7 +196,6 @@ int print_tableau(int y, int x, Card *bottom, Theme *theme) {
   }
 }
 
-
 void print_pile(Pile *pile, Theme *theme) {
   int y = pile->rule->y * (theme->height + theme->y_spacing);
   if (pile->rule->type == RULE_STOCK) {
@@ -196,8 +213,90 @@ void print_pile(Pile *pile, Theme *theme) {
   }
 }
 
+static void ui_message(const char *format, ...) {
+  va_list va;
+  move(0, 0);
+  clrtoeol();
+  va_start(va, format);
+  move(0, 0);
+  vw_printw(stdscr, format, va);
+  va_end(va);
+}
+
+static int ui_confirm(const char *message) {
+  ui_message("%s (Y/N)", message);
+  switch (getch()) {
+    case 'y': case 'Y':
+      return 1;
+    default:
+      return 0;
+  }
+}
+
+static void ui_victory_banner(int y, int x) {
+  attron(COLOR_PAIR(COLOR_PAIR_BACKGROUND));
+  mvprintw(y    , x, "**************************************");
+  mvprintw(y + 1, x, "*              VICTORY!              *");
+  mvprintw(y + 2, x, "* Press 'r' to redeal or 'q' to quit *");
+  mvprintw(y + 3, x, "**************************************");
+}
+
+int ui_victory(Pile *piles, Theme *theme) {
+  int banner_y, banner_x;
+  Pile *pile;
+  Card *card;
+  getmaxyx(stdscr, win_h, win_w);
+  banner_y = win_h / 2 - 3;
+  banner_x = win_w >= 38 ? win_w / 2 - 19 : 0;
+  nodelay(stdscr, 1);
+  for (pile = piles; pile; pile = pile->next) {
+    int pile_y = pile->rule->y * (theme->height + theme->y_spacing);
+    for (card = get_top(pile->stack); NOT_BOTTOM(card); card = card->prev) {
+      double y, x, vy, vx;
+      card->up = 1;
+      y = (double)theme_y(pile_y, theme);
+      x = (double)theme_x(pile->rule->x, theme);
+      vy = (double)rand() / RAND_MAX * -4.0;
+      vx = (double)rand() / RAND_MAX * 8.0 - 1.0;
+      while (y < win_h) {
+        switch (getch()) {
+          case 'r':
+            nodelay(stdscr, 0);
+            return 1;
+          case 'q':
+            return 0;
+        }
+        print_card(y, x, card, 1, theme);
+        ui_victory_banner(banner_y, banner_x);
+        refresh();
+        napms(70);
+        y += vy;
+        x += vx;
+        vy += 0.5;
+        if (x < 0) {
+          x = 0;
+          vx *= -1;
+        } else if (x > win_w - theme->width) {
+          x = win_w - theme->width;
+          vx *= -1;
+        }
+      }
+    }
+  }
+  while (1) {
+    switch (getch()) {
+      case 'r':
+        nodelay(stdscr, 0);
+        return 1;
+      case 'q':
+        return 0;
+    }
+  }
+}
+
 int ui_loop(Game *game, Theme *theme, Pile *piles) {
   MEVENT mouse;
+  int move_made = 0;
   int mouse_action = 0;
   selection = NULL;
   selection_pile = NULL;
@@ -231,6 +330,14 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
     refresh();
 
     attron(COLOR_PAIR(COLOR_PAIR_BACKGROUND));
+
+    if (move_made) {
+      if (check_win_condition(piles)) {
+        return ui_victory(piles, theme);
+      }
+      move_made = 0;
+    }
+
     if (mouse_action) {
       ch = mouse_action;
       mouse_action = 0;
@@ -259,7 +366,7 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         if (cur_x > max_x) cur_x = max_x;
         break;
       case 'K':
-      case 337: /* shift-up */
+      case 547: /* shift-up */
         if (cursor_card) {
           if (cursor_card->prev && NOT_BOTTOM(cursor_card->prev)) {
             Card *card = cursor_card->prev;
@@ -279,7 +386,7 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         if (cur_y < 0) cur_y = 0;
         break;
       case 'J':
-      case 336: /* shift-down */
+      case 548: /* shift-down */
         if (cursor_card && cursor_card->next) {
           Card *card = cursor_card->next;
           while (card->next && card->next->up == card->up) {
@@ -291,15 +398,26 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         }
         if (cur_y > max_y) cur_y = max_y;
         break;
+      case 'H':
+      case 391: // shift-left
+        cur_x = 0;
+        break;
+      case 'L':
+      case 400: // shift-right
+        cur_x = max_x;
+        break;
       case ' ':
         if (cursor_card) {
           if (!(cursor_card->suit & BOTTOM)) {
             if (cursor_card->up) {
               if (selection == cursor_card) {
                 if (move_to_foundation(cursor_card, cursor_pile, piles) || move_to_free_cell(cursor_card, cursor_pile, piles)) {
+                  move_made = 1;
                   clear();
                   selection = NULL;
                   selection_pile = NULL;
+                } else {
+                  ui_message(get_move_error());
                 }
               } else {
                 selection = cursor_card;
@@ -307,33 +425,63 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
               }
             } else if (cursor_pile->rule->type == RULE_STOCK) {
               if (move_to_waste(cursor_card, cursor_pile, piles)) {
+                move_made = 1;
                 clear();
+              } else {
+                ui_message(get_move_error());
               }
             } else {
               turn_card(cursor_card);
             }
           } else if (cursor_pile->rule->type == RULE_STOCK) {
             if (redeal(cursor_pile, piles)) {
+              move_made = 1;
               clear();
             } else {
-              mvprintw(0, 0, "no more redeals");
+              ui_message(get_move_error());
             }
           }
         }
         break;
+      case '1': case '2': case '3': case '4': case '5': case '6': case '7': case '8': case '9': {
+        Pile *pile;
+        int cell_i = ch - '0';
+        for (pile = piles; pile; pile = pile->next) {
+          if (pile->rule->type == RULE_CELL) {
+            cell_i--;
+            if (!cell_i) {
+              Card *src = get_top(pile->stack);
+              if (cursor_pile && NOT_BOTTOM(src)) {
+                if (legal_move_stack(cursor_pile, src, pile, piles)) {
+                  move_made = 1;
+                  clear();
+                } else {
+                  ui_message(get_move_error());
+                }
+              }
+              break;
+            }
+          }
+        }
+        break;
+      }
       case 'm':
       case 10: /* enter */
       case 13: /* enter */
         if (selection && cursor_pile) {
-          if (legal_move_stack(cursor_pile, selection, selection_pile)) {
+          if (legal_move_stack(cursor_pile, selection, selection_pile, piles)) {
+            move_made = 1;
             clear();
             selection = NULL;
             selection_pile = NULL;
+          } else {
+            ui_message(get_move_error());
           }
         }
         break;
       case 'a':
         if (auto_move_to_foundation(piles)) {
+          move_made = 1;
           clear();
         }
         break;
@@ -356,7 +504,11 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         clear();
         break;
       case 'r':
-        return 1;
+        if (ui_confirm("Redeal?")) {
+          return 1;
+        }
+        clear();
+        break;
       case 'q':
         return 0;
       case KEY_MOUSE:
@@ -371,7 +523,14 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         }
         break;
       default:
-        mvprintw(0, 0, "%d", ch);
+        if (isgraph(ch)) {
+          ui_message("Unbound key: %c (%d)", ch, ch);
+        } else if (ch < ' ') {
+          ui_message("Unbound key: ^%c", '@' + ch);
+        } else {
+          ui_message("Unbound key: (%d)", ch);
+        }
+        break;
     }
   }
   return 0;

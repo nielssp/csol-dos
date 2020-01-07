@@ -58,11 +58,14 @@ typedef enum {
   K_NEXT_SUIT,
   K_MOVE_GROUP,
   K_FROM,
+  K_WIN_RANK,
   K_REDEAL,
   K_X_SPACING,
   K_Y_SPACING,
   K_X_MARGIN,
   K_Y_MARGIN,
+  K_LEFT_PADDING,
+  K_RIGHT_PADDING,
   K_INCLUDE,
   K_GAME_DIR,
   K_THEME_DIR,
@@ -114,6 +117,8 @@ struct symbol layout_commands[] = {
   {"bottom", K_BOTTOM},
   {"fg", K_FG},
   {"bg", K_BG},
+  {"left_padding", K_LEFT_PADDING},
+  {"right_padding", K_RIGHT_PADDING},
   {NULL, K_UNDEFINED}
 };
 
@@ -141,6 +146,7 @@ struct symbol game_rule_commands[] ={
   {"next_suit", K_NEXT_SUIT},
   {"move_group", K_MOVE_GROUP},
   {"from", K_FROM},
+  {"win_rank", K_WIN_RANK},
   {NULL, K_UNDEFINED}
 };
 
@@ -415,6 +421,12 @@ Layout define_layout(FILE *file) {
       case K_BG:
         layout.color.bg = read_int(file);
         break;
+      case K_LEFT_PADDING:
+        layout.left_padding = read_int(file);
+        break;
+      case K_RIGHT_PADDING:
+        layout.right_padding = read_int(file);
+        break;
       default:
         break;
     }
@@ -584,6 +596,8 @@ GameRuleMove read_move_rule(FILE *file) {
     move = MOVE_ANY;
   } else if (strcmp(symbol, "group") == 0) {
     move = MOVE_GROUP;
+  } else if (strcmp(symbol, "one") == 0) {
+    move = MOVE_ONE;
   }
   free(symbol);
   return move;
@@ -602,6 +616,8 @@ GameRuleType read_from_rule(FILE *file) {
     type = RULE_STOCK;
   } else if (strcmp(symbol, "waste") == 0) {
     type = RULE_WASTE;
+  } else if (strcmp(symbol, "any") == 0) {
+    type = RULE_ANY;
   }
   free(symbol);
   return type;
@@ -645,6 +661,9 @@ GameRule *define_game_rule(FILE *file, GameRuleType type, int index) {
         break;
       case K_FROM:
         rule->from = read_from_rule(file);
+        break;
+      case K_WIN_RANK:
+        rule->win_rank = read_rank(file);
         break;
       default:
         break;

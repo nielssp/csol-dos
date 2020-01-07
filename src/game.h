@@ -90,6 +90,7 @@ struct game_rule {
   GameRuleRank next_rank;
   GameRuleMove move_group;
   GameRuleType from;
+  GameRuleRank win_rank;
 };
 
 struct pile {
@@ -110,14 +111,16 @@ GameList *list_games();
 Game *get_game(const char *name);
 Pile *deal_cards(Game *game, Card *deck);
 void delete_piles(Pile *piles);
-int legal_move_stack(Pile *dest, Card *src, Pile *src_pile);
+int legal_move_stack(Pile *dest, Card *src, Pile *src_pile, Pile *pile);
 int move_to_waste(Card *card, Pile *stock, Pile *piles);
 int redeal(Pile *stock, Pile *piles);
 int move_to_foundation(Card *src, Pile *src_pile, Pile *piles);
 int move_to_free_cell(Card *src, Pile *src_pile, Pile *piles);
 int auto_move_to_foundation(Pile *piles);
 int turn_card(Card *card);
+int check_win_condition(Pile *piles);
 
+char *get_move_error();
 void clear_undo_history();
 void undo_move();
 void redo_move();
