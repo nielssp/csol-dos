@@ -404,7 +404,7 @@ Layout define_layout(FILE *file) {
   Keyword command;
   Layout layout = init_layout();
   begin_block(file);
-  while (command = read_command(file, layout_commands)) {
+  while ((command = read_command(file, layout_commands))) {
     switch (command) {
       case K_TOP:
         redefine_property(&layout.top, file);
@@ -439,7 +439,7 @@ void define_theme(FILE *file) {
   Keyword command;
   Theme *theme = new_theme();
   begin_block(file);
-  while (command = read_command(file, theme_commands)) {
+  while ((command = read_command(file, theme_commands))) {
     switch (command) {
       case K_NAME:
         redefine_property(&theme->name, file);
@@ -627,7 +627,7 @@ GameRule *define_game_rule(FILE *file, GameRuleType type, int index) {
   Keyword command;
   GameRule *rule = new_game_rule(type);
   begin_block(file);
-  while (command = read_command(file, game_rule_commands)) {
+  while ((command = read_command(file, game_rule_commands))) {
     switch (command) {
       case K_X:
         rule->x = read_expr(file, index);
@@ -679,7 +679,7 @@ void execute_rule_block(FILE *file, Game *game, int index) {
   struct position pos;
   GameRule *rule = NULL;
   begin_block(file);
-  while (command = read_command(file, game_commands)) {
+  while ((command = read_command(file, game_commands))) {
     switch (command) {
       case K_NAME:
         redefine_property(&game->name, file);
@@ -771,7 +771,7 @@ int execute_file(const char *file_name) {
   has_error = 0;
   line = 1;
   column = 1;
-  while (command = read_command(file, root_commands)) {
+  while ((command = read_command(file, root_commands))) {
     switch (command) {
       case K_THEME:
         define_theme(file);

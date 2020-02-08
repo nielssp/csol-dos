@@ -4,9 +4,15 @@
  * See the LICENSE file or http://opensource.org/licenses/MIT for more information.
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
+#ifdef POSIX
+#include <dirent.h>
+#endif
+#ifdef MSDOS
 #include <dos.h>
+#endif
 
 #include "game.h"
 #include "card.h"
@@ -119,6 +125,7 @@ void load_game_dirs() {
   struct dir_list *current = game_dirs;
   while (current) {
     struct dir_list *next;
+#ifdef MSDOS
     struct find_t file;
     char *path = combine_paths(current->dir, "*");
     if (_dos_findfirst(path, _A_ARCH, &file) == 0) {
@@ -129,6 +136,21 @@ void load_game_dirs() {
       } while (_dos_findnext(&file) == 0);
     }
     free(path);
+#endif
+#ifdef POSIX
+    struct dirent **files;
+    int n = scandir(current->dir, &files, NULL, alphasort);
+    if (n >= 0) {
+      int i;
+      for (i = 0; i < n; i++) {
+        char *game_path = combine_paths(current->dir, files[i]->d_name);
+        execute_file(game_path);
+        free(game_path);
+        free(files[i]);
+      }
+      free(files);
+    }
+#endif
     next = current->next;
     free(current->dir);
     free(current);

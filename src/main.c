@@ -4,9 +4,14 @@
  * See the LICENSE file or http://opensource.org/licenses/MIT for more information.
  */
 
+#define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
+#ifdef POSIX
+#include <getopt.h>
+#else
 #include <unistd.h>
+#endif
 #include <string.h>
 #include <errno.h>
 #include <time.h>
@@ -20,14 +25,85 @@
 
 const char *short_options = "hvlt:Tms:c:";
 
+#ifdef POSIX
+const struct option long_options[] = {
+  {"help", no_argument, NULL, 'h'},
+  {"version", no_argument, NULL, 'v'},
+  {"list", no_argument, NULL, 'l'},
+  {"theme", required_argument, NULL, 't'},
+  {"themes", no_argument, NULL, 'T'},
+  {"mono", no_argument, NULL, 'm'},
+  {"seed", required_argument, NULL, 's'},
+  {"config", required_argument, NULL, 'c'},
+  {0, 0, 0, 0}
+};
+#endif
+
 enum action { PLAY, LIST_GAMES, LIST_THEMES };
 
 void describe_option(const char *short_option, const char *long_option, const char *description) {
+#ifdef POSIX
   printf("  -%-14s --%-18s %s\n", short_option, long_option, description);
+#else
+  printf("  -%-14s %s\n", short_option, description);
+#endif
 }
 
 char *find_csolrc() {
-  FILE *f = fopen("csolrc", "r");
+  FILE *f;
+#ifdef POSIX
+  char *config_dir = getenv("XDG_CONFIG_HOME");
+  char *config_file = NULL;
+  if (config_dir) {
+    config_file = combine_paths(config_dir, "csol/csolrc");
+  } else {
+    config_dir = getenv("HOME");
+    if (config_dir) {
+      config_file = combine_paths(config_dir, ".config/csol/csolrc");
+    }
+  }
+  if (config_file) {
+    f = fopen(config_file, "r");
+    if (f) {
+      fclose(f);
+      return config_file;
+    }
+    free(config_file);
+  }
+  config_dir = getenv("XDG_CONFIG_DIRS");
+  if (config_dir) {
+    int i = 0;
+    while (1) {
+      if (!config_dir[i] || config_dir[i] == ':') {
+        char *dir = malloc(i + 1);
+        strncpy(dir, config_dir, i);
+        dir[i] = '\0';
+        config_file = combine_paths(dir, "csol/csolrc");
+        f = fopen(config_file, "r");
+        free(dir);
+        if (f) {
+          fclose(f);
+          return config_file;
+        }
+        free(config_file);
+        if (!config_dir[i]) {
+          break;
+        }
+        config_dir = config_dir + i + 1;
+        i = 0;
+      } else {
+        i++;
+      }
+    }
+  } else {
+    f = fopen("/etc/xdg/csol/csolrc", "r");
+    if (f) {
+      fclose(f);
+      return strdup("/etc/xdg/csol/csolrc");
+    }
+  }
+#endif
+  f = fopen("csolrc", "r");
   if (f) {
     fclose(f);
     return strdup("csolrc");
@@ -37,6 +113,9 @@ char *find_csolrc() {
 
 int main(int argc, char *argv[]) {
   int opt, rc_opt, error;
+#ifdef POSIX
+  int option_index = 0;
+#endif
   int colors = 1;
   unsigned int seed = time(NULL);
   enum action action = PLAY;
@@ -45,7 +124,13 @@ int main(int argc, char *argv[]) {
   char *theme_name = NULL;
   Theme *theme;
   Game *game;
-  while ((opt = getopt(argc, argv, short_options)) != -1) {
+  while ((opt = 
+#ifdef POSIX
+        getopt_long(argc, argv, short_options, long_options, &option_index)
+#else
+        getopt(argc, argv, short_options)
+#endif
+        ) != -1) {
     switch (opt) {
       case 'h':
         printf("usage: %s [options] [game]\n", argv[0]);

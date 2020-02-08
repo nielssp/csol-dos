@@ -4,9 +4,15 @@
  * See the LICENSE file or http://opensource.org/licenses/MIT for more information.
  */
 
+#define _GNU_SOURCE
 #include <stdlib.h>
 #include <string.h>
+#ifdef POSIX
+#include <dirent.h>
+#endif
+#ifdef MSDOS
 #include <dos.h>
+#endif
 
 #include "theme.h"
 #include "util.h"
@@ -91,9 +97,10 @@ void register_theme_dir(const char *cwd, const char *dir) {
 }
 
 void load_theme_dirs() {
-  struct dir_list *next;
   struct dir_list *current = theme_dirs;
   while (current) {
+    struct dir_list *next;
+#ifdef MSDOS
     struct find_t file;
     char *path = combine_paths(current->dir, "*");
     if (_dos_findfirst(path, _A_ARCH, &file) == 0) {
@@ -104,6 +111,21 @@ void load_theme_dirs() {
       } while (_dos_findnext(&file) == 0);
     }
     free(path);
+#endif
+#if POSIX
+    struct dirent **files;
+    int n = scandir(current->dir, &files, NULL, alphasort);
+    if (n >= 0) {
+      int i;
+      for (i = 0; i < n; i++) {
+        char *theme_path = combine_paths(current->dir, files[i]->d_name);
+        execute_file(theme_path);
+        free(theme_path);
+        free(files[i]);
+      }
+      free(files);
+    }
+#endif
     next = current->next;
     free(current->dir);
     free(current);

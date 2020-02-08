@@ -5,7 +5,11 @@
  */
 
 #include <stdlib.h>
+#ifdef MSDOS
 #include <curses.h>
+#else
+#include <ncurses.h>
+#endif
 #include <locale.h>
 #include <time.h>
 #include <ctype.h>
@@ -58,18 +62,26 @@ void print_card_name_l(int y, int x, Card *card, Theme *theme) {
     default:
       mvprintw(y, x, "%d", card->rank);
   }
+#ifdef MSDOS
   raw_output(1);
+#endif
   printw(card_suit(card, theme));
+#ifdef MSDOS
   raw_output(0);
+#endif
 }
 
 void print_card_name_r(int y, int x, Card *card, Theme *theme) {
   if (y < 0 || y >= win_h) {
     return;
   }
+#ifdef MSDOS
   raw_output(1);
+#endif
   mvprintw(y, x - 1 - (card->rank == 10), card_suit(card, theme));
+#ifdef MSDOS
   raw_output(0);
+#endif
   switch (card->rank) {
     case ACE:
       printw("A");
@@ -399,11 +411,11 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
         if (cur_y > max_y) cur_y = max_y;
         break;
       case 'H':
-      case 391: // shift-left
+      case 391: /* shift-left */
         cur_x = 0;
         break;
       case 'L':
-      case 400: // shift-right
+      case 400: /* shift-right */
         cur_x = max_x;
         break;
       case ' ':
@@ -512,7 +524,13 @@ int ui_loop(Game *game, Theme *theme, Pile *piles) {
       case 'q':
         return 0;
       case KEY_MOUSE:
-        if (nc_getmouse(&mouse) == OK) {
+        if (
+#ifdef MSDOS
+            nc_getmouse(&mouse)
+#else
+            getmouse(&mouse)
+#endif
+            == OK) {
           cur_y = mouse.y - theme->y_margin - off_y;
           cur_x = (mouse.x - theme->x_margin) / (theme->width + theme->x_spacing);
           if (mouse.bstate & BUTTON3_PRESSED) {
