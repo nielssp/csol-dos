@@ -20,11 +20,13 @@ Can be compiled using:
 - When asked for the install path, type `C:\LIB\WATCOM`
 - Finish the installation using the default settings.
 - The installer creates an `AUTOEXEC.BAT` file that sets up the correct environment. It should look like this:
-    PATH C:\LIB\WATCOM\BINW;%PATH%;
-    SET INCLUDE=C:\LIB\WATCOM\H;
-    SET WATCOM=C:\LIB\WATCOM
-    SET EDPATH=C:\LIB\WATCOM\EDDAT
-    SET WIPFC=C:\LIB\WATCOM\WIPFC
+
+        PATH C:\LIB\WATCOM\BINW;%PATH%;
+        SET INCLUDE=C:\LIB\WATCOM\H;
+        SET WATCOM=C:\LIB\WATCOM
+        SET EDPATH=C:\LIB\WATCOM\EDDAT
+        SET WIPFC=C:\LIB\WATCOM\WIPFC
+
 - Run it: `..\AUTOEXEC.BAT`
 - Then go to the directory containing the DOS makefiles for PDCurses: `CD PDCURSES\DOS`
 - Compile PDCurses: `wmake -f Makefile.wcc`
